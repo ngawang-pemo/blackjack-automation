@@ -1,0 +1,32 @@
+# One robot run: the bot plays 200 games with the "smart" strategy, once, then stops.
+# (A refresher of the Job from the previous tutorial, now running our simulator.)
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: blackjack-bot-job
+  labels:
+    app: blackjack-bot
+spec:
+  # No retries: if it fails, we want to see "Failed" right away
+  backoffLimit: 0
+  template:
+    spec:
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+      containers:
+      - name: blackjack-bot
+        image: blackjack-bot:1.0
+        # Use the image loaded into the cluster, never download it
+        imagePullPolicy: IfNotPresent
+        # Arguments for /app/simulate.sh: the strategy name and the number of games
+        args: ["smart", "200"]
+        resources:
+          limits:
+            memory: "64Mi"
+            cpu: "500m"
+          requests:
+            memory: "16Mi"
+            cpu: "50m"

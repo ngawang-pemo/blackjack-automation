@@ -1,0 +1,9 @@
+# Build output and results
+blackjack
+results.txt
+leaderboard.txt
+*.tar
+.DS_Store
+
+# Teacher notes stay on my computer
+TEACHER.md

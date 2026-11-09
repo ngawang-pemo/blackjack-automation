@@ -1,0 +1,85 @@
+# The name shown in the Actions tab
+name: CI
+
+# When the pipeline runs. This is the TRIGGER, the heart of automation.
+on:
+  # Event trigger: run on every push to main or to any strategy branch
+  push:
+    branches: [main, "strategy-*", broken]
+  # Event trigger: run on every pull request
+  pull_request:
+  # STEP 5 OF THE README: you will add two more triggers here!
+  workflow_dispatch:
+  schedule:
+   - cron: "0 7 * * *"
+  
+
+jobs:
+  # Job 1: check the Dockerfile for bad practices
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: Dockerfile
+          # Only fail on real errors, warnings are shown but don't stop the pipeline
+          failure-threshold: error
+
+  # Job 2: build the image and run the tests. If a test fails, nothing after it runs.
+  test:
+    needs: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          # Keep the image on this VM so the next steps can run it
+          load: true
+          tags: blackjack-bot:1.0
+      - name: Run test script
+        run: |
+          chmod +x test.sh
+          # Without this line, "| tee" would hide the exit code of test.sh
+          set -o pipefail
+          ./test.sh blackjack-bot:1.0 | tee test-results.txt
+      - name: Save image for the next job
+        run: docker save blackjack-bot:1.0 -o blackjack-bot.tar
+      - uses: actions/upload-artifact@v4
+        with:
+          name: image-and-tests
+          path: |
+            test-results.txt
+            blackjack-bot.tar
+
+  # Job 3: the robot analyst. It plays every strategy and ranks them.
+  # This is the job that does the "work" nobody wants to do by hand.
+  leaderboard:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: image-and-tests
+      - name: Load the image
+        run: docker load -i blackjack-bot.tar
+      - name: Play all strategies
+        run: |
+          set -o pipefail
+          # Run leaderboard.sh (instead of simulate.sh) inside our image
+          docker run --rm --entrypoint /app/leaderboard.sh blackjack-bot:1.0 1000 | tee leaderboard.txt
+      - name: Show the leaderboard on the run page
+        # $GITHUB_STEP_SUMMARY is a special file: whatever you write there is displayed
+        # at the top of the run page, no need to open the logs
+        run: |
+          echo "## Blackjack leaderboard" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          cat leaderboard.txt >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: leaderboard
+          path: leaderboard.txt

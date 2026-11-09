@@ -1,0 +1,43 @@
+# THE AUTOMATION: Kubernetes runs the bot by itself, on a timer.
+# Nobody types a command. Every minute a new Job appears, plays 200 games and stops.
+
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: blackjack-bot-cron
+  labels:
+    app: blackjack-bot
+spec:
+  # When to run, in cron format: minute hour day-of-month month day-of-week
+  #   "* * * * *"    every minute (good for a live demo)
+  #   "*/10 * * * *" every 10 minutes
+  #   "0 9 * * *"    every day at 9:00
+  #   "0 0 * * 0"    every Sunday at midnight
+  schedule: "* * * * *"
+  # If the previous run is still going, skip the new one instead of piling up
+  concurrencyPolicy: Forbid
+  # Keep the last 3 successful Jobs (so you can read their logs) and 1 failed one
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      template:
+        spec:
+          restartPolicy: Never
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65534
+          containers:
+          - name: blackjack-bot
+            image: blackjack-bot:1.0
+            imagePullPolicy: IfNotPresent
+            # Try changing the strategy name or the number of games
+            args: ["stand-on-16", "200"]
+            resources:
+              limits:
+                memory: "64Mi"
+                cpu: "500m"
+              requests:
+                memory: "16Mi"
+                cpu: "50m"
